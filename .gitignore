@@ -1,0 +1,9 @@
+MicroApp
+*.dSYM
+*.out
+*.DS_Store
+*.exe
+*.ilk
+*.pdb
+main.obj
+.vs/*
