@@ -1,4 +1,5 @@
 #include "nanort.h"
+#include "CoconutAle/math.h"
 #include "SDL.h"
 
 #include <stdarg.h>
@@ -31,6 +32,43 @@
 #include <iostream>
 #include <fstream>
 
+struct RenderObject {
+    // TODO convert all to ca::Vec3f
+    std::vector<float> verts;
+    std::vector<nanort::real3<> > normals;
+    std::vector<unsigned int> faces;
+};
+
+RenderObject bunny;
+
+ca::Vec3f eye = {0.0f, 0.0f, -1.3f};
+ca::Vec3f forward;
+ca::Vec3f right;
+
+ca::Mat3f look_matrix;
+
+float walk_speed = 0.1f;
+// TODO pitch yaw blah blah
+float xAngle = 0.f;
+float yAngle = 0.f;
+
+void update_look_matrix() {
+    // calculate rotation
+    ca::Quat xQuat = ca::axis_angle_quat({1.0f,0.0f,0.0f}, xAngle);
+    ca::Quat yQuat = ca::axis_angle_quat({0.0f,1.0f,0.0f}, yAngle);
+    ca::Quat total_rotation = xQuat * yQuat;
+
+    // re-calculate matrices and look vectors
+    look_matrix = ca::RotationMat3f(total_rotation);
+    // TODO can't we extract the vectors from the look matrix?
+    forward = ca::mat_vec_mult(look_matrix, forward);
+    forward.y = 0;
+    normalize_modify(forward);
+    right = ca::mat_vec_mult(look_matrix, right);
+    right.y = 0;
+    normalize_modify(right);
+}
+
 void render_scene(
     int height,
     int width,
@@ -49,34 +87,35 @@ void render_scene(
         for (int x = 0; x < width; x++) {
             nanort::BVHTraceOptions trace_options;
             // Simple camera. change eye pos and direction fit to .obj model. 
+            ca::Vec3f ray_dir = {
+                (x / (float)width) - 0.5f,
+                (y / (float)height) - 0.5f,
+                1.0f};
+            ca::Vec3f rotated_vector = ca::mat_vec_mult(look_matrix, ray_dir);
             nanort::Ray<float> ray;
             ray.min_t = 0.0f;
             ray.max_t = tFar;
-            // TODO camera position
-            ray.org[0] = 0.0f;
-            ray.org[1] = 0.0f;
-            ray.org[2] = 1.0f;
-            nanort::real3<> dir;
-            dir[0] = (x / (float)width) - 0.5f;
-            dir[1] = (y / (float)height) - 0.5f;
-            dir[2] = -1.0f;
-            dir = vnormalize(dir);
-            ray.dir[0] = dir[0];
-            ray.dir[1] = dir[1];
-            ray.dir[2] = dir[2];
+            ray.org[0] = eye.x;
+            ray.org[1] = eye.y;
+            ray.org[2] = eye.z;
+            ray.dir[0] = rotated_vector.x;
+            ray.dir[1] = rotated_vector.y;
+            ray.dir[2] = rotated_vector.z;
             nanort::TriangleIntersection<> isect;
             bool hit = accel.Traverse(ray, intersector, &isect, trace_options);
             unsigned char * pixels = &(target_pixels[x * 4 + y * (width * 4)]);
             if (hit) {
                 // TODO Write your shader here.
-                debug_print("hit!\n");
-                // nanort::real3<> normal;
-                // unsigned int fid = isect.prim_id;
+                // TODO rename fid to something else
+                unsigned int fid = isect.prim_id;
+                nanort::real3<> normal = bunny.normals[fid];
+                static nanort::real3<> negZ(0.0f, 0.0f, 1.0f);
+                float red_color = nanort::vlength(normal * negZ) * 250 + 5.0f;
                 // TODO store normals
                 // normal[0] = mesh.facevarying_normals[3*3*fid+0];
                 // normal[1] = mesh.facevarying_normals[3*3*fid+1];
                 // normal[2] = mesh.facevarying_normals[3*3*fid+2];
-                pixels[0] = 255;
+                pixels[0] = red_color;
                 pixels[1] = 0;
                 pixels[2] = 0;
             } else {
@@ -88,6 +127,28 @@ void render_scene(
         }
     }
     SDL_UnlockSurface(target);
+}
+
+void debug_function(
+    int height,
+    int width,
+    const nanort::BVHAccel<float> & accel,
+    const nanort::TriangleIntersector<> & intersector,
+    SDL_Surface * target) {
+    static ca::Vec3f eye_arr [5] = {
+        {0.0f, 0.0f, -0.3f},
+        {0.3f, 0.0f, -0.3f},
+        {-0.3f, 0.0f, -0.3f},
+        {0.0f, 0.3f, -0.3f},
+        {0.0f, -0.3f, -0.3f}
+    };
+    static unsigned eye_ind = 0;
+    eye = eye_arr[eye_ind];
+    eye_ind++;
+    if (eye_ind > 5) {
+        eye_ind = 0;
+    }
+    render_scene(height, width, accel, intersector, target);
 }
 
 int window_scale = 2;
@@ -184,49 +245,73 @@ SDL_rendered_surface_init()
 PROG_MAIN {
     std::string line;
     std::ifstream myFile ("bunny.obj");
-    // TODO get normals
-    std::vector<float> bunnyVerts;
-    std::vector<unsigned int> bunnyFaces;
-    int numVerts, numFaces;
+    unsigned numVerts, numFaces;
+    unsigned num_copies = 4;
     if (myFile.is_open()) {
         myFile >> numVerts >> numFaces;
-        bunnyVerts.reserve(numVerts);
-        bunnyFaces.reserve(numFaces);
-        for (int i = 0; i < numVerts; i++) {
+        bunny.verts.resize(numVerts * 3 * num_copies);
+        bunny.normals.resize(numFaces * num_copies);
+        bunny.faces.resize(numFaces * 3 * num_copies);
+        for (unsigned i = 0; i < numVerts; i++) {
             char v;
             float v1, v2, v3;
             myFile >> v >> v1 >> v2 >> v3;
-            bunnyVerts.push_back(v1);
-            bunnyVerts.push_back(v2);
-            bunnyVerts.push_back(v3);
+            for (int j = 0; j < num_copies; j++) {
+                bunny.verts[i + j * numVerts + 0] = v1 + j * 2;
+                bunny.verts[i + j * numVerts + 1] = v2 + 0;
+                bunny.verts[i + j * numVerts + 2] = v3 + 0;
+            }
         }
-        for (int i = 0; i < numFaces; i++) {
+        for (unsigned i = 0; i < numFaces; i++) {
             char f;
             int f1, f2, f3;
             myFile >> f >> f1 >> f2 >> f3;
-            bunnyFaces.push_back(f1);
-            bunnyFaces.push_back(f2);
-            bunnyFaces.push_back(f3);
+
+            // TODO switch to use ca::Vec3f
+            nanort::real3<> p1 (&bunny.verts[f1]);
+            nanort::real3<> p2 (&bunny.verts[f2]);
+            nanort::real3<> p3 (&bunny.verts[f3]);
+            nanort::real3<> u = p2 - p1;
+            nanort::real3<> v = p3 - p1;
+
+            nanort::real3<> normal;
+            normal[0] = u.y() * v.z() - u.z() * v.y();
+            normal[1] = u.z() * v.x() - u.x() * v.z();
+            normal[2] = u.x() * v.y() - u.y() * v.x();
+
+            for (int j = 0; j < num_copies; j++) {
+                bunny.faces[i + j * numFaces + 0] = f1 + j * numVerts;
+                bunny.faces[i + j * numFaces + 1] = f2 + j * numVerts;
+                bunny.faces[i + j * numFaces + 2] = f3 + j * numVerts;
+
+                bunny.normals[i + j * numFaces] = nanort::vnormalize(normal);
+            }
         }
     } else {
         // TODO exit
     }
+
+    // initialize global values
+    forward = {0.0f, 0.0f, 1.0f};
+    right   = {1.0f, 0.0f, 0.0f};
+    update_look_matrix();
+
     nanort::BVHBuildOptions<float> options;
     nanort::TriangleMesh<float> triangle_mesh(
-            bunnyVerts.data(),
-            bunnyFaces.data(),
+            bunny.verts.data(),
+            bunny.faces.data(),
             sizeof(float) * 3/* stride */);
     nanort::TriangleSAHPred<float> triangle_pred(
-            bunnyVerts.data(),
-            bunnyFaces.data(),
+            bunny.verts.data(),
+            bunny.faces.data(),
             sizeof(float) * 3/* stride */);
 
     nanort::TriangleIntersector<> triangle_intersecter(
-            bunnyVerts.data(),
-            bunnyFaces.data(),
+            bunny.verts.data(),
+            bunny.faces.data(),
             sizeof(float) * 3/* stride */);
     nanort::BVHAccel<float> accel;
-    accel.Build(bunnyFaces.size() / 3, triangle_mesh, triangle_pred, options);
+    accel.Build(numFaces * num_copies, triangle_mesh, triangle_pred, options);
     nanort::BVHBuildStatistics stats = accel.GetStatistics();
     debug_print("  BVH statistics:\n");
     debug_print("    # of leaf   nodes: %d\n", stats.num_leaf_nodes);
@@ -257,12 +342,55 @@ PROG_MAIN {
             {
                 do
                 {
-                    if( e.type == SDL_QUIT )
+                    if( e.type == SDL_KEYDOWN )
+                    {
+                        //Select surfaces based on key press
+                        switch( e.key.keysym.sym ) {
+                            case SDLK_ESCAPE:
+                                quit = true;
+                                continue;
+                            case SDLK_w:
+                                eye += (forward * walk_speed);
+                                break;
+                            case SDLK_a:
+                                eye -= (right * walk_speed);
+                                break;
+                            case SDLK_s:
+                                eye -= (forward * walk_speed);
+                                break;
+                            case SDLK_d:
+                                eye += (right * walk_speed);
+                                break;
+                            case SDLK_LEFT:
+                                yAngle += 0.1f;
+                                update_look_matrix();
+                                break;
+
+                            case SDLK_RIGHT:
+                                yAngle -= 0.1f;
+                                update_look_matrix();
+                                break;
+                            case SDLK_UP:
+                                xAngle -= 0.1f;
+                                update_look_matrix();
+                                break;
+
+                            case SDLK_DOWN:
+                                xAngle += 0.1f;
+                                update_look_matrix();
+                                break;
+                        }
+                    }
+                    else if( e.type == SDL_QUIT )
                     {
                         quit = true;
                         continue;
                     }
                 } while ( SDL_PollEvent( &e ) != 0 );
+                render_scene(width, height, accel, triangle_intersecter, renderedSurface);
+                if (SDL_BlitScaled( renderedSurface, NULL, screenSurface, NULL )) {
+                    printf("ERROR>>> %s\n", SDL_GetError());
+                }
             }
             SDL_UpdateWindowSurface(mainWindow);
         }
