@@ -33,15 +33,15 @@
 #include <fstream>
 
 struct RenderObject {
-    // TODO convert all to ca::Vec3f
-    std::vector<float> verts;
-    std::vector<nanort::real3<> > normals;
-    std::vector<unsigned int> faces;
+    std::vector<ca::Vec3f> verts;
+    std::vector<ca::Vec3f> normals;
+    std::vector<ca::Vec3u> faces;
 };
 
 RenderObject bunny;
+RenderObject squares;
 
-ca::Vec3f eye = {0.0f, 0.0f, -1.3f};
+ca::Vec3f eye = {0.0f, 0.0f, -2.3f};
 ca::Vec3f forward;
 ca::Vec3f right;
 
@@ -69,11 +69,49 @@ void update_look_matrix() {
     normalize_modify(right);
 }
 
+struct NanortRenderData
+{
+    nanort::TriangleMesh<float> * mesh;
+    nanort::TriangleSAHPred<float> * pred;
+    nanort::TriangleIntersector<> * intersector;
+    nanort::BVHAccel<float> * accel;
+};
+
+NanortRenderData
+build_scene(const RenderObject &ro,
+            const nanort::BVHBuildOptions<float> &options)
+{
+    NanortRenderData out;
+    out.mesh = new nanort::TriangleMesh<float>(
+            reinterpret_cast<const float *>(ro.verts.data()),
+            reinterpret_cast<const unsigned *>(ro.faces.data()),
+            sizeof(float) * 3/* stride */);
+    out.pred = new nanort::TriangleSAHPred<float>(
+            reinterpret_cast<const float *>(ro.verts.data()),
+            reinterpret_cast<const unsigned *>(ro.faces.data()),
+            sizeof(float) * 3/* stride */);
+
+    out.intersector = new nanort::TriangleIntersector<>(
+            reinterpret_cast<const float *>(ro.verts.data()),
+            reinterpret_cast<const unsigned *>(ro.faces.data()),
+            sizeof(float) * 3/* stride */);
+    out.accel = new nanort::BVHAccel<float>;
+    out.accel->Build(ro.faces.size(), *out.mesh, *out.pred, options);
+    nanort::BVHBuildStatistics stats = out.accel->GetStatistics();
+    debug_print("  BVH statistics:\n");
+    debug_print("%zu\n", ro.faces.size());
+    debug_print("    # of leaf   nodes: %d\n", stats.num_leaf_nodes);
+    debug_print("    # of branch nodes: %d\n", stats.num_branch_nodes);
+    debug_print("  Max tree depth   : %d\n", stats.max_tree_depth);
+    return out;
+}
+
 void render_scene(
     int height,
     int width,
-    const nanort::BVHAccel<float> & accel,
-    const nanort::TriangleIntersector<> & intersector,
+    const NanortRenderData &render_data,
+    // const nanort::BVHAccel<float> & accel,
+    // const nanort::TriangleIntersector<> & intersector,
     SDL_Surface * target)
 {
     SDL_LockSurface(target);
@@ -102,19 +140,21 @@ void render_scene(
             ray.dir[1] = rotated_vector.y;
             ray.dir[2] = rotated_vector.z;
             nanort::TriangleIntersection<> isect;
-            bool hit = accel.Traverse(ray, intersector, &isect, trace_options);
+            bool hit = render_data.accel->Traverse(
+                ray, *render_data.intersector, &isect, trace_options);
             unsigned char * pixels = &(target_pixels[x * 4 + y * (width * 4)]);
             if (hit) {
                 // TODO Write your shader here.
                 // TODO rename fid to something else
                 unsigned int fid = isect.prim_id;
-                nanort::real3<> normal = bunny.normals[fid];
-                static nanort::real3<> negZ(0.0f, 0.0f, 1.0f);
-                float red_color = nanort::vlength(normal * negZ) * 250 + 5.0f;
-                // TODO store normals
-                // normal[0] = mesh.facevarying_normals[3*3*fid+0];
-                // normal[1] = mesh.facevarying_normals[3*3*fid+1];
-                // normal[2] = mesh.facevarying_normals[3*3*fid+2];
+                ca::Vec3f normal = squares.normals[fid];
+                static ca::Vec3f negZ = {0.0f, 0.0f, -1.0f};
+                ca::Vec3f dot = normal * negZ;
+                float mult = dot.x + dot.y + dot.z;
+                float red_color = mult * 250 + 5.0f;
+                // pixels[0] = (normal.x * 0.5f + 0.5f) * 240;
+                // pixels[1] = (normal.y * 0.5f + 0.5f) * 240;
+                // pixels[2] = (normal.z * 0.5f + 0.5f) * 240;
                 pixels[0] = red_color;
                 pixels[1] = 0;
                 pixels[2] = 0;
@@ -127,28 +167,6 @@ void render_scene(
         }
     }
     SDL_UnlockSurface(target);
-}
-
-void debug_function(
-    int height,
-    int width,
-    const nanort::BVHAccel<float> & accel,
-    const nanort::TriangleIntersector<> & intersector,
-    SDL_Surface * target) {
-    static ca::Vec3f eye_arr [5] = {
-        {0.0f, 0.0f, -0.3f},
-        {0.3f, 0.0f, -0.3f},
-        {-0.3f, 0.0f, -0.3f},
-        {0.0f, 0.3f, -0.3f},
-        {0.0f, -0.3f, -0.3f}
-    };
-    static unsigned eye_ind = 0;
-    eye = eye_arr[eye_ind];
-    eye_ind++;
-    if (eye_ind > 5) {
-        eye_ind = 0;
-    }
-    render_scene(height, width, accel, intersector, target);
 }
 
 int window_scale = 2;
@@ -236,6 +254,67 @@ SDL_rendered_surface_init()
             rmask, gmask, bmask, amask);
 }
 
+void drawCube(
+    RenderObject &cube,
+    const ca::Vec3f& pos,
+    const ca::Mat3f& rot_mat,
+    const float scale = 1.0f)
+{
+    const ca::Vec3f cube_verts [8] = {
+        {-scale + pos.x, -scale + pos.y, -scale + pos.z},
+        {-scale + pos.x, -scale + pos.y,  scale + pos.z},
+        {-scale + pos.x,  scale + pos.y, -scale + pos.z},
+        {-scale + pos.x,  scale + pos.y,  scale + pos.z},
+        { scale + pos.x, -scale + pos.y, -scale + pos.z},
+        { scale + pos.x, -scale + pos.y,  scale + pos.z},
+        { scale + pos.x,  scale + pos.y, -scale + pos.z},
+        { scale + pos.x,  scale + pos.y,  scale + pos.z}
+    };
+    ca::Vec3f cube_normals [12];
+    const unsigned length_v = (unsigned)(cube.verts.size());
+    const ca::Vec3u cube_faces [12] = {
+        {length_v + 5, length_v + 7, length_v + 1},
+        {length_v + 3, length_v + 1, length_v + 7},
+        {length_v + 4, length_v + 6, length_v + 5},
+        {length_v + 7, length_v + 5, length_v + 6},
+        {length_v + 7, length_v + 6, length_v + 3},
+        {length_v + 2, length_v + 3, length_v + 6},
+        {length_v + 5, length_v + 1, length_v + 4},
+        {length_v + 0, length_v + 4, length_v + 1},
+        {length_v + 1, length_v + 3, length_v + 0},
+        {length_v + 2, length_v + 0, length_v + 3},
+        {length_v + 4, length_v + 0, length_v + 6},
+        {length_v + 2, length_v + 6, length_v + 0}
+    };
+
+    for (size_t i = 0; i < 12; i++) {
+        const ca::Vec3f& p1 = cube_verts[cube_faces[i].x - length_v];
+        const ca::Vec3f& p2 = cube_verts[cube_faces[i].y - length_v];
+        const ca::Vec3f& p3 = cube_verts[cube_faces[i].z - length_v];
+        ca::Vec3f u = p2 - p1;
+        ca::Vec3f v = p3 - p1;
+
+        ca::Vec3f normal = {
+            u.y * v.z - u.z * v.y,
+            u.z * v.x - u.x * v.z,
+            u.x * v.y - u.y * v.x
+        };
+        normal = rot_mat * normal;
+        ca::normalize_modify(normal);
+        cube_normals[i] = normal;
+    }
+    size_t cube_verts_i = cube.verts.size();
+    cube.verts.insert(cube.verts.end(), cube_verts, cube_verts + 8 );
+    cube.faces.insert(cube.faces.end(), cube_faces, cube_faces + 12);
+    cube.normals.insert(cube.normals.end(), cube_normals, cube_normals + 12);
+
+    // rotate the vertices
+    while (cube_verts_i < cube.verts.size()) {
+        cube.verts[cube_verts_i] = (rot_mat * cube.verts[cube_verts_i]);
+        cube_verts_i++;
+    }
+}
+
 #if defined(_MSC_VER)
 #define PROG_MAIN int WINAPI WinMain(HINSTANCE, HINSTANCE, LPTSTR, int)
 #else
@@ -246,78 +325,70 @@ PROG_MAIN {
     std::string line;
     std::ifstream myFile ("bunny.obj");
     unsigned numVerts, numFaces;
-    unsigned num_copies = 4;
-    if (myFile.is_open()) {
-        myFile >> numVerts >> numFaces;
-        bunny.verts.resize(numVerts * 3 * num_copies);
-        bunny.normals.resize(numFaces * num_copies);
-        bunny.faces.resize(numFaces * 3 * num_copies);
-        for (unsigned i = 0; i < numVerts; i++) {
-            char v;
-            float v1, v2, v3;
-            myFile >> v >> v1 >> v2 >> v3;
-            for (int j = 0; j < num_copies; j++) {
-                bunny.verts[i + j * numVerts + 0] = v1 + j * 2;
-                bunny.verts[i + j * numVerts + 1] = v2 + 0;
-                bunny.verts[i + j * numVerts + 2] = v3 + 0;
-            }
-        }
-        for (unsigned i = 0; i < numFaces; i++) {
-            char f;
-            int f1, f2, f3;
-            myFile >> f >> f1 >> f2 >> f3;
+    unsigned num_copies = 1;
+    // if (myFile.is_open()) {
+    //     myFile >> numVerts >> numFaces;
+    //     bunny.verts.resize(numVerts * num_copies);
+    //     bunny.normals.resize(numFaces * num_copies);
+    //     bunny.faces.resize(numFaces * num_copies);
+    //     for (unsigned i = 0; i < numVerts; i++) {
+    //         char v;
+    //         float v1, v2, v3;
+    //         myFile >> v >> v1 >> v2 >> v3;
+    //         {
+    //             ca::Vec3f pos = {v1, v2, v3};
+    //             drawCube(squares,pos);
+    //         }
+    //         for (int j = 0; j < num_copies; j++) {
+    //             ca::Vec3f pos = {v1 + j * 2, v2, v3};
+    //             bunny.verts[i + j * numVerts] = pos;
+    //         }
+    //     }
+    //     for (unsigned i = 0; i < numFaces; i++) {
+    //         char f;
+    //         int f1, f2, f3;
+    //         myFile >> f >> f1 >> f2 >> f3;
 
-            // TODO switch to use ca::Vec3f
-            nanort::real3<> p1 (&bunny.verts[f1]);
-            nanort::real3<> p2 (&bunny.verts[f2]);
-            nanort::real3<> p3 (&bunny.verts[f3]);
-            nanort::real3<> u = p2 - p1;
-            nanort::real3<> v = p3 - p1;
+    //         // TODO switch to use ca::Vec3f
+    //         ca::Vec3f& p1 = bunny.verts[f1];
+    //         ca::Vec3f& p2 = bunny.verts[f2];
+    //         ca::Vec3f& p3 = bunny.verts[f3];
+    //         ca::Vec3f u = p2 - p1;
+    //         ca::Vec3f v = p3 - p1;
 
-            nanort::real3<> normal;
-            normal[0] = u.y() * v.z() - u.z() * v.y();
-            normal[1] = u.z() * v.x() - u.x() * v.z();
-            normal[2] = u.x() * v.y() - u.y() * v.x();
+    //         ca::Vec3f normal = {
+    //             u.y * v.z - u.z * v.y,
+    //             u.z * v.x - u.x * v.z,
+    //             u.x * v.y - u.y * v.x
+    //         };
+    //         ca::normalize_modify(normal);
 
-            for (int j = 0; j < num_copies; j++) {
-                bunny.faces[i + j * numFaces + 0] = f1 + j * numVerts;
-                bunny.faces[i + j * numFaces + 1] = f2 + j * numVerts;
-                bunny.faces[i + j * numFaces + 2] = f3 + j * numVerts;
-
-                bunny.normals[i + j * numFaces] = nanort::vnormalize(normal);
-            }
-        }
-    } else {
-        // TODO exit
-    }
+    //         for (int j = 0; j < num_copies; j++) {
+    //             ca::Vec3u face = {
+    //                 f1 + j * numVerts,
+    //                 f2 + j * numVerts,
+    //                 f3 + j * numVerts
+    //             };
+    //             bunny.faces[i + j * numFaces] = face;
+    //             bunny.normals[i + j * numFaces] = normal;
+    //         }
+    //     }
+    // } else {
+    //     // TODO exit
+    // }
 
     // initialize global values
     forward = {0.0f, 0.0f, 1.0f};
     right   = {1.0f, 0.0f, 0.0f};
     update_look_matrix();
 
+    ca::Quat q_rotate = ca::axis_angle_quat({1.0f,0.0f,0.0f}, -1.0f);
+
+    drawCube(squares, ca::Vec3f{0.f,0.f,0.f}, ca::RotationMat3f(q_rotate));
+
     nanort::BVHBuildOptions<float> options;
-    nanort::TriangleMesh<float> triangle_mesh(
-            bunny.verts.data(),
-            bunny.faces.data(),
-            sizeof(float) * 3/* stride */);
-    nanort::TriangleSAHPred<float> triangle_pred(
-            bunny.verts.data(),
-            bunny.faces.data(),
-            sizeof(float) * 3/* stride */);
-
-    nanort::TriangleIntersector<> triangle_intersecter(
-            bunny.verts.data(),
-            bunny.faces.data(),
-            sizeof(float) * 3/* stride */);
-    nanort::BVHAccel<float> accel;
-    accel.Build(numFaces * num_copies, triangle_mesh, triangle_pred, options);
-    nanort::BVHBuildStatistics stats = accel.GetStatistics();
-    debug_print("  BVH statistics:\n");
-    debug_print("    # of leaf   nodes: %d\n", stats.num_leaf_nodes);
-    debug_print("    # of branch nodes: %d\n", stats.num_branch_nodes);
-    debug_print("  Max tree depth   : %d\n", stats.max_tree_depth);
-
+    NanortRenderData bunny_render_data = build_scene(bunny, options);
+    NanortRenderData squares_render_data = build_scene(squares, options);
     // Initialize SDL
 
     SDLWindowSurfacePair sdl_init_result = SDL_init_window();
@@ -327,7 +398,7 @@ PROG_MAIN {
     // SDL loop
     {
         SDL_Surface * renderedSurface = SDL_rendered_surface_init();
-        render_scene(width, height, accel, triangle_intersecter, renderedSurface);
+        render_scene(width, height, squares_render_data, renderedSurface);
 
         if (SDL_BlitScaled( renderedSurface, NULL, screenSurface, NULL )) {
             printf("ERROR>>> %s\n", SDL_GetError());
@@ -387,7 +458,7 @@ PROG_MAIN {
                         continue;
                     }
                 } while ( SDL_PollEvent( &e ) != 0 );
-                render_scene(width, height, accel, triangle_intersecter, renderedSurface);
+                render_scene(width, height, squares_render_data, renderedSurface);
                 if (SDL_BlitScaled( renderedSurface, NULL, screenSurface, NULL )) {
                     printf("ERROR>>> %s\n", SDL_GetError());
                 }

@@ -22,6 +22,7 @@ struct Vec4f;
 struct Vec4i;
 struct Vec3f;
 struct Vec3i;
+struct Vec3u;
 
 inline float dot(Vec4f a, Vec4f b);
 inline float dot(Vec4i a, Vec4i b);
@@ -64,8 +65,8 @@ inline Vec3f normalize_copy(Vec3f v);
 inline void normalize_modify(Vec4f& v);
 inline Vec4f normalize_copy(Vec4f v);
 
-inline Mat3f mat_mult(Mat3f a, Mat3f b);
-inline Mat4f mat_mult(Mat4f a, Mat4f b);
+inline Mat3f mat_mult(const Mat3f a, const Mat3f b);
+inline Mat4f mat_mult(const Mat4f a, const Mat4f b);
 
 inline Vec3f mat_vec_mult(Mat3f a, Vec3f b);
 inline Vec4f mat_vec_mult(Mat4f a, Vec4f b);
@@ -82,13 +83,13 @@ struct Mat4f {
     static Mat4f Identity() {
         return {1.f, 0.f, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f,
                 0.f, 0.f, 1.f, 0.f, 0.f, 0.f, 0.f, 1.f}; }
-    Mat4f operator * (const Mat4f m) {
+    Mat4f operator * (const Mat4f m) const {
         return mat_mult(*this, m);
     }
-    inline Vec4f operator * (const Vec4f v);
-    inline float operator() (int row, int col) {
+    inline Vec4f operator * (const Vec4f v) const;
+    inline float operator() (int row, int col) const {
         assert (row >= 0 && row < 4 && col >= 0 && col < 4);
-        float * arr = &x1;
+        const float * arr = &x1;
         return arr[row * 4 + col];
     }
     inline bool equals(Mat4f& other) {
@@ -98,9 +99,13 @@ struct Mat4f {
             && z1 == other.z1 && z2 == other.z2 && z3 == other.z3 && z4 == other.z4
             && w1 == other.w1 && w2 == other.w2 && w3 == other.w3 && w4 == other.w4;
     }
+    inline const Vec4f& X() const;
     inline Vec4f& X();
+    inline const Vec4f& Y() const;
     inline Vec4f& Y();
+    inline const Vec4f& Z() const;
     inline Vec4f& Z();
+    inline const Vec4f& W() const;
     inline Vec4f& W();
 };
 
@@ -109,17 +114,20 @@ struct Mat3f {
           y1, y2, y3,
           z1, z2, z3;
     static Mat3f Identity() { return {1.f, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f, 0.f, 1.f}; }
-    Mat3f operator * (const Mat3f m) {
+    Mat3f operator * (const Mat3f m) const {
         return mat_mult(*this, m);
     }
-    inline Vec3f operator * (const Vec3f v);
-    inline float operator() (int row, int col) {
+    inline Vec3f operator * (const Vec3f v) const;
+    inline float operator() (int row, int col) const {
         assert (row >= 0 && row < 3 && col >= 0 && col < 3);
-        float * arr = &x1;
+        const float * arr = &x1;
         return arr[row * 3 + col];
     }
+    inline const Vec3f& X() const;
     inline Vec3f& X();
+    inline const Vec3f& Y() const;
     inline Vec3f& Y();
+    inline const Vec3f& Z() const;
     inline Vec3f& Z();
 };
 
@@ -152,17 +160,29 @@ struct Vec4f {
     inline bool equals(Vec4f& other) { return VEC4_EQUALS(other); }
 
 };
-inline Vec4f Mat4f::operator * (const Vec4f v) {
+inline Vec4f Mat4f::operator * (const Vec4f v) const {
     return mat_vec_mult(*this, v);
+}
+inline const Vec4f& Mat4f::X() const {
+    return *(reinterpret_cast<const Vec4f *>(this) + 0);
 }
 inline Vec4f& Mat4f::X() {
     return *(reinterpret_cast<Vec4f *>(this) + 0);
 }
+inline const Vec4f& Mat4f::Y() const {
+    return *(reinterpret_cast<const Vec4f *>(this) + 0);
+}
 inline Vec4f& Mat4f::Y() {
     return *(reinterpret_cast<Vec4f *>(this) + 1);
 }
+inline const Vec4f& Mat4f::Z() const {
+    return *(reinterpret_cast<const Vec4f *>(this) + 2);
+}
 inline Vec4f& Mat4f::Z() {
     return *(reinterpret_cast<Vec4f *>(this) + 2);
+}
+inline const Vec4f& Mat4f::W() const {
+    return *(reinterpret_cast<const Vec4f *>(this) + 3);
 }
 inline Vec4f& Mat4f::W() {
     return *(reinterpret_cast<Vec4f *>(this) + 3);
@@ -182,14 +202,23 @@ struct Vec3f {
     Vec3f operator * (const Vec3f v) { return termwise_multiply(*this, v); }
     void operator *= (const Vec3f v) { *this = termwise_multiply(*this, v); }
 };
-inline Vec3f Mat3f::operator * (const Vec3f v) {
+inline Vec3f Mat3f::operator * (const Vec3f v) const {
     return mat_vec_mult(*this, v);
+}
+inline const Vec3f& Mat3f::X() const {
+    return *(reinterpret_cast<const Vec3f *>(this) + 0);
 }
 inline Vec3f& Mat3f::X() {
     return *(reinterpret_cast<Vec3f *>(this) + 0);
 }
+inline const Vec3f& Mat3f::Y() const {
+    return *(reinterpret_cast<const Vec3f *>(this) + 0);
+}
 inline Vec3f& Mat3f::Y() {
     return *(reinterpret_cast<Vec3f *>(this) + 1);
+}
+inline const Vec3f& Mat3f::Z() const {
+    return *(reinterpret_cast<const Vec3f *>(this) + 2);
 }
 inline Vec3f& Mat3f::Z() {
     return *(reinterpret_cast<Vec3f *>(this) + 2);
@@ -291,6 +320,22 @@ struct Vec3i {
     void operator *= (const float f) { *this = vec_scalar_mult(*this, f); }
     Vec3i operator * (const Vec3i v) { return termwise_multiply(*this, v); }
     void operator *= (const Vec3i v) { *this = termwise_multiply(*this, v); }
+};
+
+struct Vec3u {
+    unsigned x, y, z;
+    static Vec3u Identity() { return {1, 0, 0}; }
+
+    // TODO
+    // Vec3u operator-() { return {-x, -y, -z}; }
+    // Vec3u operator-(const Vec3u b) const { return vec_sub(*this, b); }
+    // void operator-=(const Vec3u b) { *this = vec_sub(*this, b); }
+    // Vec3u operator+(const Vec3u b) const { return vec_add(*this, b); }
+    // void operator+=(const Vec3u b) { *this = vec_add(*this, b); }
+    // Vec3u operator * (const float f) { return vec_scalar_mult(*this, f); }
+    // void operator *= (const float f) { *this = vec_scalar_mult(*this, f); }
+    // Vec3u operator * (const Vec3u v) { return termwise_multiply(*this, v); }
+    // void operator *= (const Vec3u v) { *this = termwise_multiply(*this, v); }
 };
 
 #define SUB_VEC4(a, b) { a.x - b.x, a.y - b.y, a.z - b.z, a.w - b.w }
@@ -431,7 +476,7 @@ void transpose(Mat3f * a) {
     a->y3 = old_z2;
 }
 
-inline Mat3f mat_mult(Mat3f a, Mat3f b) {
+inline Mat3f mat_mult(const Mat3f a, const Mat3f b) {
     Mat3f bt = transpose(b);
     return {
         dot(a.X(), bt.X()), dot(a.X(), bt.Y()), dot(a.X(), bt.Z()),
@@ -439,7 +484,7 @@ inline Mat3f mat_mult(Mat3f a, Mat3f b) {
         dot(a.Z(), bt.X()), dot(a.Z(), bt.Y()), dot(a.Z(), bt.Z())};
 }
 
-inline Mat4f mat_mult(Mat4f a, Mat4f b) {
+inline Mat4f mat_mult(const Mat4f a, const Mat4f b) {
     Mat4f bt = transpose(b);
     return {
         dot(a.X(), bt.X()), dot(a.X(), bt.Y()), dot(a.X(), bt.Z()), dot(a.X(), bt.W()),

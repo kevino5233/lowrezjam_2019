@@ -12,6 +12,8 @@ measure performance rate w/ one bunny + variable number of bunnies
 
 TODO
 bunnys don't render right. figure out why. Test with cubes?
+    it was with the bunny
+first person controls might be kinda fucked
 extract look vectors from look matrix
 mouse controls
 add lighting
