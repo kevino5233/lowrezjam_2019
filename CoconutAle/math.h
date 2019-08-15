@@ -170,7 +170,7 @@ inline Vec4f& Mat4f::X() {
     return *(reinterpret_cast<Vec4f *>(this) + 0);
 }
 inline const Vec4f& Mat4f::Y() const {
-    return *(reinterpret_cast<const Vec4f *>(this) + 0);
+    return *(reinterpret_cast<const Vec4f *>(this) + 1);
 }
 inline Vec4f& Mat4f::Y() {
     return *(reinterpret_cast<Vec4f *>(this) + 1);
@@ -212,7 +212,7 @@ inline Vec3f& Mat3f::X() {
     return *(reinterpret_cast<Vec3f *>(this) + 0);
 }
 inline const Vec3f& Mat3f::Y() const {
-    return *(reinterpret_cast<const Vec3f *>(this) + 0);
+    return *(reinterpret_cast<const Vec3f *>(this) + 1);
 }
 inline Vec3f& Mat3f::Y() {
     return *(reinterpret_cast<Vec3f *>(this) + 1);

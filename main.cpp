@@ -48,25 +48,21 @@ ca::Vec3f right;
 ca::Mat3f look_matrix;
 
 float walk_speed = 0.1f;
-// TODO pitch yaw blah blah
-float xAngle = 0.f;
-float yAngle = 0.f;
 
-void update_look_matrix() {
+void update_look_matrix(float xAngleDelta, float yAngleDelta) {
     // calculate rotation
-    ca::Quat xQuat = ca::axis_angle_quat({1.0f,0.0f,0.0f}, xAngle);
-    ca::Quat yQuat = ca::axis_angle_quat({0.0f,1.0f,0.0f}, yAngle);
-    ca::Quat total_rotation = xQuat * yQuat;
+    ca::Quat q_x = ca::axis_angle_quat({1.0f,0.0f,0.0f}, xAngleDelta);
+    ca::Quat q_y = ca::axis_angle_quat({0.0f,1.0f,0.0f}, yAngleDelta);
+    ca::Quat q_rotation = q_x * q_y;
+    ca::Mat3f m_rotation = ca::RotationMat3f(q_rotation);
+    look_matrix = m_rotation * look_matrix;
+    ca::Vec3f * v3f_matrix_ptr = reinterpret_cast<ca::Vec3f *>(&look_matrix);
 
-    // re-calculate matrices and look vectors
-    look_matrix = ca::RotationMat3f(total_rotation);
     // TODO can't we extract the vectors from the look matrix?
-    forward = ca::mat_vec_mult(look_matrix, forward);
+	forward = m_rotation * forward;
     forward.y = 0;
-    normalize_modify(forward);
-    right = ca::mat_vec_mult(look_matrix, right);
+	right = m_rotation * right;
     right.y = 0;
-    normalize_modify(right);
 }
 
 struct NanortRenderData
@@ -380,7 +376,8 @@ PROG_MAIN {
     // initialize global values
     forward = {0.0f, 0.0f, 1.0f};
     right   = {1.0f, 0.0f, 0.0f};
-    update_look_matrix();
+    look_matrix = ca::Mat3f::Identity();
+    update_look_matrix(0.f, 0.f);
 
     ca::Quat q_rotate = ca::axis_angle_quat({1.0f,0.0f,0.0f}, -1.0f);
 
@@ -433,22 +430,18 @@ PROG_MAIN {
                                 eye += (right * walk_speed);
                                 break;
                             case SDLK_LEFT:
-                                yAngle += 0.1f;
-                                update_look_matrix();
+                                update_look_matrix( 0.0f,  0.1f);
                                 break;
 
                             case SDLK_RIGHT:
-                                yAngle -= 0.1f;
-                                update_look_matrix();
+                                update_look_matrix( 0.0f, -0.1f);
                                 break;
                             case SDLK_UP:
-                                xAngle -= 0.1f;
-                                update_look_matrix();
+                                update_look_matrix(-0.1f,  0.0f);
                                 break;
 
                             case SDLK_DOWN:
-                                xAngle += 0.1f;
-                                update_look_matrix();
+                                update_look_matrix( 0.1f,  0.0f);
                                 break;
                         }
                     }
