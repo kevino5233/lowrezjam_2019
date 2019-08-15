@@ -256,15 +256,16 @@ void drawCube(
     const ca::Mat3f& rot_mat,
     const float scale = 1.0f)
 {
+    const float extent = scale * 0.5f;
     const ca::Vec3f cube_verts [8] = {
-        {-scale + pos.x, -scale + pos.y, -scale + pos.z},
-        {-scale + pos.x, -scale + pos.y,  scale + pos.z},
-        {-scale + pos.x,  scale + pos.y, -scale + pos.z},
-        {-scale + pos.x,  scale + pos.y,  scale + pos.z},
-        { scale + pos.x, -scale + pos.y, -scale + pos.z},
-        { scale + pos.x, -scale + pos.y,  scale + pos.z},
-        { scale + pos.x,  scale + pos.y, -scale + pos.z},
-        { scale + pos.x,  scale + pos.y,  scale + pos.z}
+        {-extent + pos.x, -extent + pos.y, -extent + pos.z},
+        {-extent + pos.x, -extent + pos.y,  extent + pos.z},
+        {-extent + pos.x,  extent + pos.y, -extent + pos.z},
+        {-extent + pos.x,  extent + pos.y,  extent + pos.z},
+        { extent + pos.x, -extent + pos.y, -extent + pos.z},
+        { extent + pos.x, -extent + pos.y,  extent + pos.z},
+        { extent + pos.x,  extent + pos.y, -extent + pos.z},
+        { extent + pos.x,  extent + pos.y,  extent + pos.z}
     };
     ca::Vec3f cube_normals [12];
     const unsigned length_v = (unsigned)(cube.verts.size());
@@ -382,6 +383,8 @@ PROG_MAIN {
     ca::Quat q_rotate = ca::axis_angle_quat({1.0f,0.0f,0.0f}, -1.0f);
 
     drawCube(squares, ca::Vec3f{0.f,0.f,0.f}, ca::RotationMat3f(q_rotate));
+    drawCube(squares, ca::Vec3f{-1.5f,0.0f,0.0f}, ca::RotationMat3f(q_rotate));
+    drawCube(squares, ca::Vec3f{ 1.5f,0.0f,0.0f}, ca::RotationMat3f(q_rotate));
 
     nanort::BVHBuildOptions<float> options;
     NanortRenderData bunny_render_data = build_scene(bunny, options);

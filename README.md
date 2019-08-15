@@ -13,7 +13,8 @@ measure performance rate w/ one bunny + variable number of bunnies
 TODO
 bunnys don't render right. figure out why. Test with cubes?
     it was with the bunny
+    get propre bunny.
+how tf am I gonna do lighting
 mouse controls
-add lighting
 mac build
 see if it's possible to add kitchen set
