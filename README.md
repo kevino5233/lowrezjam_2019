@@ -14,7 +14,7 @@ TODO
 bunnys don't render right. figure out why. Test with cubes?
     it was with the bunny
     get propre bunny.
-how tf am I gonna do lighting
-mouse controls
+lighting works, need pipeline
+mouse controls + 3D controls work
 mac build
 see if it's possible to add kitchen set

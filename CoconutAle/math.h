@@ -192,14 +192,14 @@ struct Vec3f {
     float x, y, z;
     static Vec3f Identity() { return {1.f, 0.f, 0.f}; }
 
-    Vec3f operator-() { return {-x, -y, -z}; }
+    Vec3f operator-() const { return {-x, -y, -z}; }
     Vec3f operator-(const Vec3f b) const { return vec_sub(*this, b); }
     void operator-=(const Vec3f b) { *this = vec_sub(*this, b); }
     Vec3f operator+(const Vec3f b) const { return vec_add(*this, b); }
     void operator+=(const Vec3f b) { *this = vec_add(*this, b); }
-    Vec3f operator * (const float f) { return vec_scalar_mult(*this, f); }
+    Vec3f operator * (const float f) const { return vec_scalar_mult(*this, f); }
     void operator *= (const float f) { *this = vec_scalar_mult(*this, f); }
-    Vec3f operator * (const Vec3f v) { return termwise_multiply(*this, v); }
+    Vec3f operator * (const Vec3f v) const { return termwise_multiply(*this, v); }
     void operator *= (const Vec3f v) { *this = termwise_multiply(*this, v); }
 };
 inline Vec3f Mat3f::operator * (const Vec3f v) const {
@@ -235,7 +235,7 @@ struct Quat {
     Vec3f V() const { return {x, y, z}; }
     float S() const { return w; }
 
-    Quat operator-() { return {-x, -y, -z, -w}; }
+    Quat operator-() const { return {-x, -y, -z, -w}; }
     Quat operator-(const Quat b) const { return vec_sub(*this, b); }
     void operator-=(const Quat b) { *this = vec_sub(*this, b); }
     Quat operator+(const Quat b) const { return vec_add(*this, b); }
@@ -276,7 +276,7 @@ struct Vec4i {
     int x, y, z, w;
     static Vec4i Identity() { return {1, 0, 0, 0}; }
 
-    Vec4i operator-() { return {-x, -y, -z, -w}; }
+    Vec4i operator-() const { return {-x, -y, -z, -w}; }
     Vec4i operator-(const Vec4i b) const { return vec_sub(*this, b); }
     void operator-=(const Vec4i b) { *this = vec_sub(*this, b); }
     Vec4i operator+(const Vec4i b) const { return vec_add(*this, b); }
@@ -311,7 +311,7 @@ struct Vec3i {
     int x, y, z;
     static Vec3i Identity() { return {1, 0, 0}; }
 
-    Vec3i operator-() { return {-x, -y, -z}; }
+    Vec3i operator-() const { return {-x, -y, -z}; }
     Vec3i operator-(const Vec3i b) const { return vec_sub(*this, b); }
     void operator-=(const Vec3i b) { *this = vec_sub(*this, b); }
     Vec3i operator+(const Vec3i b) const { return vec_add(*this, b); }
@@ -359,10 +359,10 @@ inline Vec3i vec_add(Vec3i a, Vec3i b) { return ADD_VEC3(a, b); }
 #define TERMWISE_MULT_VEC4(a, b) { a.x * b.x, a.y * b.y, a.z * b.z, a.w * b.w }
 #define TERMWISE_MULT_VEC3(a, b) { a.x * b.x, a.y * b.y, a.z * b.z }
 
-inline Vec4f termwise_multiply(Vec4f a, Vec4f b) { return TERMWISE_MULT_VEC4(a, b); }
-inline Vec4i termwise_multiply(Vec4i a, Vec4i b) { return TERMWISE_MULT_VEC4(a, b); }
-inline Vec3f termwise_multiply(Vec3f a, Vec3f b) { return TERMWISE_MULT_VEC3(a, b); }
-inline Vec3i termwise_multiply(Vec3i a, Vec3i b) { return TERMWISE_MULT_VEC3(a, b); }
+inline Vec4f termwise_multiply(const Vec4f a, const Vec4f b) { return TERMWISE_MULT_VEC4(a, b); }
+inline Vec4i termwise_multiply(const Vec4i a, const Vec4i b) { return TERMWISE_MULT_VEC4(a, b); }
+inline Vec3f termwise_multiply(const Vec3f a, const Vec3f b) { return TERMWISE_MULT_VEC3(a, b); }
+inline Vec3i termwise_multiply(const Vec3i a, const Vec3i b) { return TERMWISE_MULT_VEC3(a, b); }
 
 #define DOT_VEC4(a, b) a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w
 #define DOT_VEC3(a, b) a.x * b.x + a.y * b.y + a.z * b.z

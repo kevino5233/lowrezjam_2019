@@ -53,7 +53,7 @@ void update_look_matrix(float xAngleDelta, float yAngleDelta) {
     // calculate rotation
     ca::Quat q_x = ca::axis_angle_quat({1.0f,0.0f,0.0f}, xAngleDelta);
     ca::Quat q_y = ca::axis_angle_quat({0.0f,1.0f,0.0f}, yAngleDelta);
-    ca::Quat q_rotation = q_x * q_y;
+    ca::Quat q_rotation = q_y * q_x;
     ca::Mat3f m_rotation = ca::RotationMat3f(q_rotation);
     look_matrix = m_rotation * look_matrix;
     ca::Vec3f * v3f_matrix_ptr = reinterpret_cast<ca::Vec3f *>(&look_matrix);
@@ -143,11 +143,39 @@ void render_scene(
                 // TODO Write your shader here.
                 // TODO rename fid to something else
                 unsigned int fid = isect.prim_id;
-                ca::Vec3f normal = squares.normals[fid];
-                static ca::Vec3f negZ = {0.0f, 0.0f, -1.0f};
-                ca::Vec3f dot = normal * negZ;
-                float mult = dot.x + dot.y + dot.z;
-                float red_color = mult * 250 + 5.0f;
+                const ca::Vec3f& v_normal = squares.normals[fid];
+
+                float red_color = 0.0f;
+
+                // global directional light
+                {
+                    static const ca::Vec3f negZ = {0.0f, 0.0f, -1.0f};
+                    const float f_dot = ca::dot(v_normal, negZ);
+                    if (f_dot >= 0.0f) {
+                        red_color += f_dot * 100 + 5.0f;
+                    }
+                }
+
+                // global sphere light
+                {
+                    static const ca::Vec3f v_sphereLight = {0.0f,0.0f,0.0f};
+                    const ca::Vec3u &v_face = squares.faces[fid];
+                    const ca::Vec3f &v_p1 = squares.verts[v_face.x];
+                    const ca::Vec3f &v_p2 = squares.verts[v_face.y];
+                    const ca::Vec3f &v_p3 = squares.verts[v_face.z];
+                    const ca::Vec3f v_u = v_p2 - v_p1;
+                    const ca::Vec3f v_v = v_p3 - v_p1;
+                    const ca::Vec3f v_hit = v_u * isect.u + v_v * isect.v + v_p1;
+                    const ca::Vec3f v_toLight = v_hit - v_sphereLight;
+                    const float f_dot = ca::dot(v_toLight, v_normal);
+                    if (f_dot < 0.0f) {
+                        float mult = 5.0f / ca::length(v_toLight);
+                        if (mult >= 1.0f) {
+                            mult = 1.0f;
+                        }
+                        red_color += mult * 100;
+                    }
+                }
                 // pixels[0] = (normal.x * 0.5f + 0.5f) * 240;
                 // pixels[1] = (normal.y * 0.5f + 0.5f) * 240;
                 // pixels[2] = (normal.z * 0.5f + 0.5f) * 240;
@@ -248,6 +276,68 @@ SDL_rendered_surface_init()
             width, height,
             32, /* bitdepth */
             rmask, gmask, bmask, amask);
+}
+
+void drawInvertedCube(
+    RenderObject &cube,
+    const ca::Vec3f& pos,
+    const ca::Mat3f& rot_mat,
+    const float scale = 10.0f)
+{
+    const float extent = scale * 0.5f;
+    const ca::Vec3f cube_verts [8] = {
+        {-extent + pos.x, -extent + pos.y, -extent + pos.z},
+        {-extent + pos.x, -extent + pos.y,  extent + pos.z},
+        {-extent + pos.x,  extent + pos.y, -extent + pos.z},
+        {-extent + pos.x,  extent + pos.y,  extent + pos.z},
+        { extent + pos.x, -extent + pos.y, -extent + pos.z},
+        { extent + pos.x, -extent + pos.y,  extent + pos.z},
+        { extent + pos.x,  extent + pos.y, -extent + pos.z},
+        { extent + pos.x,  extent + pos.y,  extent + pos.z}
+    };
+    ca::Vec3f cube_normals [12];
+    const unsigned length_v = (unsigned)(cube.verts.size());
+    const ca::Vec3u cube_faces [12] = {
+        {length_v + 1, length_v + 7, length_v + 5},
+        {length_v + 7, length_v + 1, length_v + 3},
+        {length_v + 5, length_v + 6, length_v + 4},
+        {length_v + 6, length_v + 5, length_v + 7},
+        {length_v + 3, length_v + 6, length_v + 7},
+        {length_v + 6, length_v + 3, length_v + 2},
+        {length_v + 4, length_v + 1, length_v + 5},
+        {length_v + 1, length_v + 4, length_v + 0},
+        {length_v + 0, length_v + 3, length_v + 1},
+        {length_v + 3, length_v + 0, length_v + 2},
+        {length_v + 6, length_v + 0, length_v + 4},
+        {length_v + 0, length_v + 6, length_v + 2}
+    };
+
+    for (size_t i = 0; i < 12; i++) {
+        const ca::Vec3f& p1 = cube_verts[cube_faces[i].x - length_v];
+        const ca::Vec3f& p2 = cube_verts[cube_faces[i].y - length_v];
+        const ca::Vec3f& p3 = cube_verts[cube_faces[i].z - length_v];
+        ca::Vec3f u = p2 - p1;
+        ca::Vec3f v = p3 - p1;
+
+        ca::Vec3f normal = {
+            u.y * v.z - u.z * v.y,
+            u.z * v.x - u.x * v.z,
+            u.x * v.y - u.y * v.x
+        };
+        normal = rot_mat * normal;
+        ca::normalize_modify(normal);
+        cube_normals[i] = normal;
+    }
+    size_t cube_verts_i = cube.verts.size();
+    cube.verts.insert(cube.verts.end(), cube_verts, cube_verts + 8 );
+    cube.faces.insert(cube.faces.end(), cube_faces, cube_faces + 12);
+    cube.normals.insert(cube.normals.end(), cube_normals, cube_normals + 12);
+
+    // rotate the vertices
+    while (cube_verts_i < cube.verts.size()) {
+        cube.verts[cube_verts_i] = (rot_mat * cube.verts[cube_verts_i]);
+        cube_verts_i++;
+    }
 }
 
 void drawCube(
@@ -381,6 +471,8 @@ PROG_MAIN {
     update_look_matrix(0.f, 0.f);
 
     ca::Quat q_rotate = ca::axis_angle_quat({1.0f,0.0f,0.0f}, -1.0f);
+
+    drawInvertedCube(squares, ca::Vec3f{0.f,0.f,0.f}, ca::Mat3f::Identity());
 
     drawCube(squares, ca::Vec3f{0.f,0.f,0.f}, ca::RotationMat3f(q_rotate));
     drawCube(squares, ca::Vec3f{-1.5f,0.0f,0.0f}, ca::RotationMat3f(q_rotate));
